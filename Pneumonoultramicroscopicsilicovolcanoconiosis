@@ -1,0 +1,162 @@
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local enabled = true
+local Plr, ClosestPart = nil, nil
+
+local function findNearestEnemy()
+    if not Void.Targetaim then return nil, nil end
+    local ClosestDistance, ClosestPlayer, ClosestPart = math.huge, nil, nil
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer then
+            local Character = Player.Character
+            if Character and Character:FindFirstChild("Humanoid") and Character.Humanoid.Health > 0 then
+                local Part = Character:FindFirstChild(Void.AimPart)
+                if Part then
+                    local Distance = (LocalPlayer.Character[Void.AimPart].Position - Part.Position).Magnitude
+                    if Distance < ClosestDistance then
+                        ClosestPlayer = Player
+                        ClosestPart = Part
+                        ClosestDistance = Distance
+                    end
+                end
+            end
+        end
+    end
+    return ClosestPlayer, ClosestPart
+end
+
+local function highlight(plr)
+    if not Void.Targetaim then return end
+    if plr and plr.Character then
+        local highlight = Instance.new("Highlight")
+        highlight.Parent = plr.Character
+        highlight.FillColor = Color3.new(0.411765, 0.501961, 1.000000)
+        highlight.OutlineColor = Color3.new(0.031373, 0.031373, 0.031373)
+        highlight.FillTransparency = 0.6
+        highlight.OutlineTransparency = 0
+    end
+end
+
+local Sigmaballs = Instance.new("ScreenGui")
+local ImageButton = Instance.new("ImageButton")
+local Ui2corner = Instance.new("UICorner")
+
+Sigmaballs.Name = "Sigmaballs"
+Sigmaballs.Parent = CoreGui
+Sigmaballs.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Sigmaballs.ResetOnSpawn = false
+
+ImageButton.Name = "ImageButton"
+ImageButton.Parent = Sigmaballs
+ImageButton.Active = true
+ImageButton.Draggable = true
+ImageButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ImageButton.BackgroundTransparency = 0.35
+ImageButton.Size = UDim2.new(0, 90, 0, 90)
+ImageButton.Image = "rbxassetid://140623923630784"
+ImageButton.Position = UDim2.new(0.5, -45, 0.5, -45)
+
+Ui2corner.CornerRadius = UDim.new(0.2, 0)
+Ui2corner.Parent = ImageButton
+
+ImageButton.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    if enabled then
+        ImageButton.Image = "rbxassetid://140623923630784"
+        if Void.Targetaim then
+            Plr, ClosestPart = findNearestEnemy()
+            highlight(Plr)
+        end
+    else
+        ImageButton.Image = "rbxassetid://96086736054343"
+        if Plr and Plr.Character then
+            for _, obj in pairs(Plr.Character:GetChildren()) do
+                if obj:IsA("Highlight") then
+                    obj:Destroy()
+                end
+            end
+        end
+        Plr, ClosestPart = nil, nil
+    end
+end)
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 90, 0, 30)
+button.Position = UDim2.new(0, 100, 0, 50)
+button.TextSize = 20
+button.Draggable = true
+button.Font = Enum.Font.Arcade
+button.BackgroundTransparency = 1
+button.BorderSizePixel = 1
+button.Text = "Forcehit"
+button.TextColor3 = Color3.fromRGB(255, 0, 0)
+button.Parent = Sigmaballs
+
+button.MouseButton1Click:Connect(function()
+    Void.Hvh.ForceHit = not Void.Hvh.ForceHit
+    button.TextColor3 = Void.Hvh.ForceHit and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+end)
+
+local function superFastForceHit()
+    if Void.Hvh.ForceHit and ClosestPart then
+        task.spawn(function()
+            for _ = 1, 35 do
+                local LocalPlayer = Players.LocalPlayer
+                local Character = LocalPlayer.Character
+                local Position = Character.HumanoidRootPart.Position
+                local Direction = Character.HumanoidRootPart.CFrame.LookVector
+                local ShootPosition = Position + Direction * 10
+                local Offset = Direction * 0.5
+
+                local Args = {
+                    "Shoot",
+                    {
+                        {
+                            {
+                                Instance = ClosestPart,
+                                Normal = Direction.unit,
+                                Position = Position
+                            }
+                        },
+                        {
+                            {
+                                thePart = ClosestPart,
+                                theOffset = CFrame.new(Offset)
+                            }
+                        },
+                        ShootPosition,
+                        Position,
+                        tick()
+                    }
+                }
+
+                ReplicatedStorage.MainEvent:FireServer(unpack(Args))
+                task.wait(0.001)
+            end
+        end)
+    end
+end
+
+RunService.Heartbeat:Connect(superFastForceHit)
+
+local mt = getrawmetatable(game)
+local old = mt.__index
+setreadonly(mt, false)
+
+old = hookmetamethod(game, "__index", function(t, k)
+    mt.__index = newcclosure(function(self, key)
+        if not checkcaller() and enabled and Void.Targetaim and typeof(self) == "Instance" and self:IsA("Mouse") and key == "Hit" then
+            Plr, ClosestPart = findNearestEnemy()
+            if Plr and Plr.Character and Plr.Character:FindFirstChild(Void.AimPart) then
+                local target = Plr.Character[Void.AimPart]
+                local Position = target.Position + (Plr.Character.Head.Velocity * Void.Prediction.X)
+                return CFrame.new(Position)
+            end
+        end
+        return old(self, key)
+    end)
+end)
